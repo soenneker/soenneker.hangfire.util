@@ -38,8 +38,8 @@ public class HangfireUtil : IHangfireUtil
             }
 
             int batch = _options.BatchSize;
-            var pageCount = (int)((count + batch - 1) / batch); // ceil(count / batch)
-            var toDelete = new List<string>(Math.Min((int)count, 1000));
+            var pageCount = (int) ((count + batch - 1) / batch); // ceil(count / batch)
+            var toDelete = new List<string>(Math.Min((int) count, 1000));
 
             for (var i = 0; i < pageCount; i++)
             {
@@ -89,8 +89,8 @@ public class HangfireUtil : IHangfireUtil
             }
 
             int batch = _options.BatchSize;
-            var pageCount = (int)((count + batch - 1) / batch);
-            var toDelete = new List<string>(Math.Min((int)count, 1000));
+            var pageCount = (int) ((count + batch - 1) / batch);
+            var toDelete = new List<string>(Math.Min((int) count, 1000));
 
             for (var i = 0; i < pageCount; i++)
             {
@@ -128,8 +128,8 @@ public class HangfireUtil : IHangfireUtil
         }
 
         int batch = _options.BatchSize;
-        var pageCount = (int)((count + batch - 1) / batch);
-        var toDelete = new List<string>(Math.Min((int)count, 1000));
+        var pageCount = (int) ((count + batch - 1) / batch);
+        var toDelete = new List<string>(Math.Min((int) count, 1000));
 
         for (var i = 0; i < pageCount; i++)
         {

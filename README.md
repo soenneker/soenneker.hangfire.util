@@ -31,7 +31,7 @@ builder.Services.Configure<HangfireUtilOptions>(options =>
 });
 
 // Register the HangfireUtil service
-builder.Services.AddSingleton<IHangfireUtil, HangfireUtil>();
+builder.Services.AddHangfireUtilAsSingleton();
 
 RecurringJob.AddOrUpdate<IHangfireUtil>($"{nameof(IHangfireUtil.DeleteFailedJobs)}", c => c.DeleteFailedJobs(),  "0 0 * * *");
 ```

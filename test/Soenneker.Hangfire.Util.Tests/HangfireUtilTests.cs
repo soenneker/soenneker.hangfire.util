@@ -1,4 +1,5 @@
-﻿using Soenneker.Hangfire.Util.Abstract;
+﻿using FluentAssertions;
+using Soenneker.Hangfire.Util.Abstract;
 using Soenneker.Tests.FixturedUnit;
 using Xunit;
 
@@ -17,6 +18,6 @@ public class HangfireUtilTests : FixturedUnitTest
     [Fact]
     public void Default()
     {
-
+        _util.Should().NotBeNull();
     }
 }
