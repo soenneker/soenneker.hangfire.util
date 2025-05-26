@@ -1,4 +1,4 @@
-﻿using FluentAssertions;
+﻿using AwesomeAssertions;
 using Soenneker.Hangfire.Util.Abstract;
 using Soenneker.Tests.FixturedUnit;
 using Xunit;
