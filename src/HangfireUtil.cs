@@ -11,7 +11,7 @@ using Microsoft.Extensions.Options;
 namespace Soenneker.Hangfire.Util;
 
 ///<inheritdoc cref="IHangfireUtil"/>
-public class HangfireUtil : IHangfireUtil
+public sealed class HangfireUtil : IHangfireUtil
 {
     private readonly ILogger<HangfireUtil> _logger;
     private readonly HangfireUtilOptions _options;
