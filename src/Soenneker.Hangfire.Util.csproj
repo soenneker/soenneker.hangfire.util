@@ -45,6 +45,6 @@
         <PackageReference Include="Hangfire.Core" Version="1.8.20" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.6" />
         <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.6" />
-        <PackageReference Include="Soenneker.Hangfire.SkipMissedRuns" Version="3.0.664" />
+        <PackageReference Include="Soenneker.Hangfire.SkipMissedRuns" Version="3.0.665" />
     </ItemGroup>
 </Project>
