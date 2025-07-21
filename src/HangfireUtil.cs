@@ -46,14 +46,10 @@ public sealed class HangfireUtil : IHangfireUtil
                     continue;
                 }
 
-                // 1) leave the Failed list and enter Deleted
-                tx.SetJobState(jobId, new DeletedState());
+                BackgroundJob.Delete(jobId);               // state → Deleted, adds to sorted‑set "deleted"
+                tx.ExpireJob(jobId, TimeSpan.Zero);        // give every job key TTL = 0
+                tx.RemoveFromSet("deleted", jobId );
 
-                // 2) scrub the job’s hashes/lists immediately
-                tx.ExpireJob(jobId, TimeSpan.Zero);
-
-                // 3) get rid of the id from Deleted index as well
-                tx.RemoveFromSet("deleted", jobId);
 
                 deleted++;
             }
