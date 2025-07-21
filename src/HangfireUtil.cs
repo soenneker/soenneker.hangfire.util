@@ -21,37 +21,38 @@ public sealed class HangfireUtil : IHangfireUtil
         _options = options.Value;
     }
 
-
     private int PageDelete<TDto>(Func<int, int, JobList<TDto>> fetchPage, Func<TDto?, bool> shouldDelete, Action<TDto?, string>? whenSkip = null)
         where TDto : class
     {
-        var deleted = 0;
+        IStorageConnection? conn = JobStorage.Current.GetConnection();
         int batch = _options.BatchSize;
-        var offset = 0;
+        var deleted = 0;
 
         while (true)
         {
-            JobList<TDto> page = fetchPage(offset, batch);
+            JobList<TDto> page = fetchPage(0, batch);
+
             if (page.Count == 0)
                 break;
 
-            foreach ((string key, TDto? dto) in page)
+            using IWriteOnlyTransaction? tx = conn.CreateWriteTransaction();
+
+            foreach ((string jobId, TDto? dto) in page)
             {
-                if (shouldDelete(dto))
+                if (!shouldDelete(dto))
                 {
-                    BackgroundJob.Delete(key);
-                    deleted++;
+                    whenSkip?.Invoke(dto, jobId);
+                    continue;
                 }
-                else
-                {
-                    whenSkip?.Invoke(dto, key);
-                }
+
+                tx.ExpireJob(jobId, TimeSpan.Zero); // marks every related key expired
+                deleted++;
             }
 
-            if (page.Count < batch) // last page reached
-                break;
+            tx.Commit(); // one round‑trip per page
 
-            offset += batch;
+            if (page.Count < batch)
+                break; // nothing left
         }
 
         return deleted;
@@ -87,6 +88,7 @@ public sealed class HangfireUtil : IHangfireUtil
         {
             IMonitoringApi? monitor = JobStorage.Current.GetMonitoringApi();
             int deleted = PageDelete(monitor.FailedJobs, _ => true); // delete every key returned
+
 
             _logger.LogInformation("Deleted {Count} failed jobs.", deleted);
         }
