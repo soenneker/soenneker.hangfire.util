@@ -1,16 +1,15 @@
 ﻿using Hangfire;
-using Soenneker.Hangfire.Util.Abstract;
-using Soenneker.Hangfire.Util.Options;
-using System;
-using System.Collections.Generic;
 using Hangfire.Storage;
 using Hangfire.Storage.Monitoring;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Soenneker.Hangfire.Util.Abstract;
+using Soenneker.Hangfire.Util.Options;
+using System;
 
 namespace Soenneker.Hangfire.Util;
 
-///<inheritdoc cref="IHangfireUtil"/>
+/// <inheritdoc cref="IHangfireUtil"/>
 public sealed class HangfireUtil : IHangfireUtil
 {
     private readonly ILogger<HangfireUtil> _logger;
@@ -22,6 +21,42 @@ public sealed class HangfireUtil : IHangfireUtil
         _options = options.Value;
     }
 
+
+    private int PageDelete<TDto>(Func<int, int, JobList<TDto>> fetchPage, Func<TDto?, bool> shouldDelete, Action<TDto?, string>? whenSkip = null)
+        where TDto : class
+    {
+        var deleted = 0;
+        int batch = _options.BatchSize;
+        var offset = 0;
+
+        while (true)
+        {
+            JobList<TDto> page = fetchPage(offset, batch);
+            if (page.Count == 0)
+                break;
+
+            foreach ((string key, TDto? dto) in page)
+            {
+                if (shouldDelete(dto))
+                {
+                    BackgroundJob.Delete(key);
+                    deleted++;
+                }
+                else
+                {
+                    whenSkip?.Invoke(dto, key);
+                }
+            }
+
+            if (page.Count < batch) // last page reached
+                break;
+
+            offset += batch;
+        }
+
+        return deleted;
+    }
+
     public void DeleteFailedJobs()
     {
         _logger.LogInformation("Starting deletion of failed jobs...");
@@ -29,42 +64,13 @@ public sealed class HangfireUtil : IHangfireUtil
         try
         {
             IMonitoringApi? monitor = JobStorage.Current.GetMonitoringApi();
-            long count = monitor.FailedCount();
-
-            if (count == 0)
+            int deleted = PageDelete(monitor.FailedJobs, dto => dto?.Job == null || (_options.ShouldDeleteFailedJob?.Invoke(dto) ?? false), (dto, key) =>
             {
-                _logger.LogDebug("No failed jobs to delete.");
-                return;
-            }
+                if (_options.NotifyOnUnhandledFailedJobs && dto != null)
+                    _logger.LogWarning("Unhandled failed job {Key} ({Type})\nDetails: {Details}", key, dto.ExceptionType, dto.ExceptionDetails);
+            });
 
-            int batch = _options.BatchSize;
-            var pageCount = (int) ((count + batch - 1) / batch); // ceil(count / batch)
-            var toDelete = new List<string>(Math.Min((int) count, 1000));
-
-            for (var i = 0; i < pageCount; i++)
-            {
-                JobList<FailedJobDto>? jobs = monitor.FailedJobs(i * batch, batch);
-
-                foreach ((string? key, FailedJobDto? job) in jobs)
-                {
-                    if (job?.Job == null || (_options.ShouldDeleteFailedJob?.Invoke(job) ?? false))
-                    {
-                        toDelete.Add(key);
-                    }
-                    else if (_options.NotifyOnUnhandledFailedJobs)
-                    {
-                        _logger.LogWarning("Unhandled failed job: {key} ({type})\nDetails: {details}", key, job.ExceptionType, job.ExceptionDetails);
-                    }
-                }
-            }
-
-            for (var i = 0; i < toDelete.Count; i++)
-            {
-                _logger.LogDebug("Deleting failed job: {id}", toDelete[i]);
-                BackgroundJob.Delete(toDelete[i]);
-            }
-
-            _logger.LogInformation("Deleted {count} failed jobs.", toDelete.Count);
+            _logger.LogInformation("Deleted {Count} failed jobs.", deleted);
         }
         catch (Exception ex)
         {
@@ -73,39 +79,16 @@ public sealed class HangfireUtil : IHangfireUtil
         }
     }
 
-    public void DeleteFailedJobsWithoutNotifications()
+    public void DeleteFailedJobsSilently()
     {
-        _logger.LogInformation("Deleting failed jobs (without notifications)...");
+        _logger.LogInformation("Deleting failed jobs (silent)...");
 
         try
         {
             IMonitoringApi? monitor = JobStorage.Current.GetMonitoringApi();
-            long count = monitor.FailedCount();
+            int deleted = PageDelete(monitor.FailedJobs, _ => true); // delete every key returned
 
-            if (count == 0)
-            {
-                _logger.LogDebug("No failed jobs to delete.");
-                return;
-            }
-
-            int batch = _options.BatchSize;
-            var pageCount = (int) ((count + batch - 1) / batch);
-            var toDelete = new List<string>(Math.Min((int) count, 1000));
-
-            for (var i = 0; i < pageCount; i++)
-            {
-                JobList<FailedJobDto>? jobs = monitor.FailedJobs(i * batch, batch);
-                foreach ((string? key, _) in jobs)
-                    toDelete.Add(key);
-            }
-
-            for (var i = 0; i < toDelete.Count; i++)
-            {
-                _logger.LogDebug("Deleting failed job: {id}", toDelete[i]);
-                BackgroundJob.Delete(toDelete[i]);
-            }
-
-            _logger.LogInformation("Deleted {count} failed jobs.", toDelete.Count);
+            _logger.LogInformation("Deleted {Count} failed jobs.", deleted);
         }
         catch (Exception ex)
         {
@@ -116,50 +99,33 @@ public sealed class HangfireUtil : IHangfireUtil
 
     public void DeleteSuccessfulJobs()
     {
-        _logger.LogInformation("Deleting miscellaneous successful jobs...");
+        _logger.LogInformation("Deleting successful jobs...");
 
-        IMonitoringApi? monitor = JobStorage.Current.GetMonitoringApi();
-        long count = monitor.SucceededListCount();
-
-        if (count == 0)
+        try
         {
-            _logger.LogDebug("No successful jobs to delete.");
-            return;
+            IMonitoringApi? monitor = JobStorage.Current.GetMonitoringApi();
+            int deleted = PageDelete(monitor.SucceededJobs, dto => _options.ShouldDeleteSucceededJob?.Invoke(dto) ?? false);
+
+            _logger.LogInformation("Deleted {Count} successful jobs.", deleted);
         }
-
-        int batch = _options.BatchSize;
-        var pageCount = (int) ((count + batch - 1) / batch);
-        var toDelete = new List<string>(Math.Min((int) count, 1000));
-
-        for (var i = 0; i < pageCount; i++)
+        catch (Exception ex)
         {
-            JobList<SucceededJobDto>? jobs = monitor.SucceededJobs(i * batch, batch);
-            foreach ((string? key, SucceededJobDto? job) in jobs)
-            {
-                if (_options.ShouldDeleteSucceededJob?.Invoke(job) ?? false)
-                    toDelete.Add(key);
-            }
+            _logger.LogError(ex, "Error deleting successful jobs");
+            throw;
         }
-
-        for (var i = 0; i < toDelete.Count; i++)
-        {
-            _logger.LogDebug("Deleting successful job: {id}", toDelete[i]);
-            BackgroundJob.Delete(toDelete[i]);
-        }
-
-        _logger.LogInformation("Deleted {count} successful jobs.", toDelete.Count);
     }
 
     public void DeleteExistingRecurringJobs()
     {
         using IStorageConnection? connection = JobStorage.Current.GetConnection();
-        List<RecurringJobDto>? jobs = connection.GetRecurringJobs();
+        var removed = 0;
 
-        for (var i = 0; i < jobs.Count; i++)
+        foreach (RecurringJobDto job in connection.GetRecurringJobs())
         {
-            RecurringJobDto job = jobs[i];
-            _logger.LogInformation("Removing recurring job: {id}", job.Id);
             RecurringJob.RemoveIfExists(job.Id);
+            removed++;
         }
+
+        _logger.LogInformation("Removed {Count} recurring jobs.", removed);
     }
 }

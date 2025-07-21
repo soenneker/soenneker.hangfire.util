@@ -17,7 +17,7 @@ public interface IHangfireUtil
     /// Deletes all failed Hangfire jobs without logging unhandled ones.
     /// </summary>
     [SkipMissedRuns]
-    void DeleteFailedJobsWithoutNotifications();
+    void DeleteFailedJobsSilently();
 
     /// <summary>
     /// Deletes succeeded Hangfire jobs based on filtering options.
