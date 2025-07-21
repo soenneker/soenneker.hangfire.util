@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Soenneker.Hangfire.Util.Abstract;
 using Soenneker.Hangfire.Util.Options;
 using System;
+using Hangfire.States;
 
 namespace Soenneker.Hangfire.Util;
 
@@ -21,21 +22,21 @@ public sealed class HangfireUtil : IHangfireUtil
         _options = options.Value;
     }
 
-    private int PageDelete<TDto>(Func<int, int, JobList<TDto>> fetchPage, Func<TDto?, bool> shouldDelete, Action<TDto?, string>? whenSkip = null)
+    private int PageDelete<TDto>(Func<int, int, JobList<TDto>> fetchPage,
+        Func<TDto?, bool> shouldDelete,
+        Action<TDto?, string>? whenSkip = null)
         where TDto : class
     {
-        IStorageConnection? conn = JobStorage.Current.GetConnection();
+        var conn = JobStorage.Current.GetConnection();
         int batch = _options.BatchSize;
-        var deleted = 0;
+        int deleted = 0;
 
         while (true)
         {
             JobList<TDto> page = fetchPage(0, batch);
+            if (page.Count == 0) break;
 
-            if (page.Count == 0)
-                break;
-
-            using IWriteOnlyTransaction? tx = conn.CreateWriteTransaction();
+            using IWriteOnlyTransaction tx = conn.CreateWriteTransaction();
 
             foreach ((string jobId, TDto? dto) in page)
             {
@@ -45,14 +46,22 @@ public sealed class HangfireUtil : IHangfireUtil
                     continue;
                 }
 
-                tx.ExpireJob(jobId, TimeSpan.Zero); // marks every related key expired
+                // 1) leave the Failed list and enter Deleted
+                tx.SetJobState(jobId, new DeletedState());
+
+                // 2) scrub the job’s hashes/lists immediately
+                tx.ExpireJob(jobId, TimeSpan.Zero);
+
+                // 3) get rid of the id from Deleted index as well
+                tx.RemoveFromSet("deleted", jobId);
+
                 deleted++;
             }
 
-            tx.Commit(); // one round‑trip per page
+            tx.Commit();             // one round‑trip per page
 
-            if (page.Count < batch)
-                break; // nothing left
+            if (page.Count < batch)  // last partial page
+                break;
         }
 
         return deleted;
