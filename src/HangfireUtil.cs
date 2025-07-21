@@ -22,18 +22,21 @@ public sealed class HangfireUtil : IHangfireUtil
         _options = options.Value;
     }
 
-    private int PageDelete<TDto>(Func<int, int, JobList<TDto>> fetchPage,
+    private int PageDelete<TDto>(
+        string setName,
+        Func<int, int, JobList<TDto>> fetchPage,
         Func<TDto?, bool> shouldDelete,
         Action<TDto?, string>? whenSkip = null)
         where TDto : class
     {
-        var conn = JobStorage.Current.GetConnection();
+        IStorageConnection? conn = JobStorage.Current.GetConnection();
         int batch = _options.BatchSize;
-        int deleted = 0;
+        var deleted = 0;
+        var offset = 0;        
 
         while (true)
         {
-            JobList<TDto> page = fetchPage(0, batch);
+            JobList<TDto> page = fetchPage(offset, batch);
             if (page.Count == 0) break;
 
             using IWriteOnlyTransaction tx = conn.CreateWriteTransaction();
@@ -43,25 +46,26 @@ public sealed class HangfireUtil : IHangfireUtil
                 if (!shouldDelete(dto))
                 {
                     whenSkip?.Invoke(dto, jobId);
+                    offset++;               // skip past it so we don’t see it again
                     continue;
                 }
 
-                BackgroundJob.Delete(jobId);               // state → Deleted, adds to sorted‑set "deleted"
-                tx.ExpireJob(jobId, TimeSpan.Zero);        // give every job key TTL = 0
-                tx.RemoveFromSet("deleted", jobId );
-
-
+                tx.SetJobState(jobId, new DeletedState());
+                tx.RemoveFromSet(setName, jobId);
+                tx.ExpireJob(jobId, TimeSpan.Zero);
                 deleted++;
             }
 
-            tx.Commit();             // one round‑trip per page
+            tx.Commit();
 
-            if (page.Count < batch)  // last partial page
-                break;
+            // If we deleted *anything* the set got smaller, so keep the same offset.
+            // If we skipped everything, we advanced offset above, so we still progress.
+            if (page.Count < batch) break;  // reached end even under heavy load
         }
 
         return deleted;
     }
+
 
     public void DeleteFailedJobs()
     {
@@ -70,11 +74,12 @@ public sealed class HangfireUtil : IHangfireUtil
         try
         {
             IMonitoringApi? monitor = JobStorage.Current.GetMonitoringApi();
-            int deleted = PageDelete(monitor.FailedJobs, dto => dto?.Job == null || (_options.ShouldDeleteFailedJob?.Invoke(dto) ?? false), (dto, key) =>
-            {
-                if (_options.NotifyOnUnhandledFailedJobs && dto != null)
-                    _logger.LogWarning("Unhandled failed job {Key} ({Type})\nDetails: {Details}", key, dto.ExceptionType, dto.ExceptionDetails);
-            });
+            int deleted = PageDelete("failed", monitor.FailedJobs, dto => dto?.Job == null || (_options.ShouldDeleteFailedJob?.Invoke(dto) ?? false),
+                (dto, key) =>
+                {
+                    if (_options.NotifyOnUnhandledFailedJobs && dto != null)
+                        _logger.LogWarning("Unhandled failed job {Key} ({Type})\nDetails: {Details}", key, dto.ExceptionType, dto.ExceptionDetails);
+                });
 
             _logger.LogInformation("Deleted {Count} failed jobs.", deleted);
         }
@@ -92,7 +97,7 @@ public sealed class HangfireUtil : IHangfireUtil
         try
         {
             IMonitoringApi? monitor = JobStorage.Current.GetMonitoringApi();
-            int deleted = PageDelete(monitor.FailedJobs, _ => true); // delete every key returned
+            int deleted = PageDelete("failed", monitor.FailedJobs, _ => true); // delete every key returned
 
 
             _logger.LogInformation("Deleted {Count} failed jobs.", deleted);
@@ -104,14 +109,14 @@ public sealed class HangfireUtil : IHangfireUtil
         }
     }
 
-    public void DeleteSuccessfulJobs()
+    public void DeleteSucceededJobs()
     {
-        _logger.LogInformation("Deleting successful jobs...");
+        _logger.LogInformation("Deleting succeeded jobs...");
 
         try
         {
             IMonitoringApi? monitor = JobStorage.Current.GetMonitoringApi();
-            int deleted = PageDelete(monitor.SucceededJobs, dto => _options.ShouldDeleteSucceededJob?.Invoke(dto) ?? false);
+            int deleted = PageDelete("succeeded", monitor.SucceededJobs, dto => _options.ShouldDeleteSucceededJob?.Invoke(dto) ?? false);
 
             _logger.LogInformation("Deleted {Count} successful jobs.", deleted);
         }
@@ -134,5 +139,29 @@ public sealed class HangfireUtil : IHangfireUtil
         }
 
         _logger.LogInformation("Removed {Count} recurring jobs.", removed);
+    }
+
+    public void PurgeHangfireGarbage()
+    {
+        IMonitoringApi? monitor = JobStorage.Current.GetMonitoringApi();
+
+        // 1) failed jobs whose *reason* is “Job expired”
+        int expired = PageDelete("failed", monitor.FailedJobs, IsJobExpired);
+
+        // 2) everything that still sits in the deleted bucket
+        int alreadyDeleted = PageDelete("deleted", monitor.DeletedJobs, _ => true);
+
+        _logger.LogInformation("Purged {Expired} expired-failed + {Deleted} deleted jobs.", expired, alreadyDeleted);
+    }
+
+    private static bool IsJobExpired(FailedJobDto? dto)
+    {
+        // null hash? -> already expired
+        if (dto == null) return true;
+
+        // Hangfire puts "Job expired" into Reason; sometimes ExceptionMessage too.
+        return (dto.Reason?.Contains("Job expired", StringComparison.OrdinalIgnoreCase) ?? false) ||
+               (dto.ExceptionMessage?.Contains("expired", StringComparison.OrdinalIgnoreCase) ?? false) ||
+               (dto.ExceptionType?.Contains("Expired", StringComparison.OrdinalIgnoreCase) ?? false);
     }
 }

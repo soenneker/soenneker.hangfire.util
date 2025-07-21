@@ -23,11 +23,14 @@ public interface IHangfireUtil
     /// Deletes succeeded Hangfire jobs based on filtering options.
     /// </summary>
     [SkipMissedRuns]
-    void DeleteSuccessfulJobs();
+    void DeleteSucceededJobs();
 
     /// <summary>
     /// Removes all currently scheduled recurring Hangfire jobs.
     /// </summary>
     [SkipMissedRuns]
     void DeleteExistingRecurringJobs();
+
+    [SkipMissedRuns]
+    void PurgeHangfireGarbage();
 }
