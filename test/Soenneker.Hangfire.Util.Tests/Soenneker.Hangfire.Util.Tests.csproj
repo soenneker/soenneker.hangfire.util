@@ -27,7 +27,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Soenneker.Hangfire.Util.csproj" />
+        <ProjectReference Include="..\..\src\Soenneker.Hangfire.Util\Soenneker.Hangfire.Util.csproj" />
     </ItemGroup>
 
     <ItemGroup>
