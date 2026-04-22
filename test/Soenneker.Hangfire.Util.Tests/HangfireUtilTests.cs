@@ -1,21 +1,20 @@
-﻿using AwesomeAssertions;
+using AwesomeAssertions;
 using Soenneker.Hangfire.Util.Abstract;
-using Soenneker.Tests.FixturedUnit;
-using Xunit;
+using Soenneker.Tests.HostedUnit;
 
 namespace Soenneker.Hangfire.Util.Tests;
 
-[Collection("Collection")]
-public class HangfireUtilTests : FixturedUnitTest
+[ClassDataSource<Host>(Shared = SharedType.PerTestSession)]
+public class HangfireUtilTests : HostedUnitTest
 {
     private readonly IHangfireUtil _util;
 
-    public HangfireUtilTests(Fixture fixture, ITestOutputHelper output) : base(fixture, output)
+    public HangfireUtilTests(Host host) : base(host)
     {
         _util = Resolve<IHangfireUtil>(true);
     }
 
-    [Fact]
+    [Test]
     public void Default()
     {
         _util.Should().NotBeNull();
