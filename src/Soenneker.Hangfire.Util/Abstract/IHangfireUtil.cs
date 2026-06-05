@@ -31,6 +31,9 @@ public interface IHangfireUtil
     [SkipMissedRuns]
     void DeleteExistingRecurringJobs();
 
+    /// <summary>
+    /// Executes the purge hangfire garbage operation.
+    /// </summary>
     [SkipMissedRuns]
     void PurgeHangfireGarbage();
 }
