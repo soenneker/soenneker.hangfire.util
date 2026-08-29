@@ -32,7 +32,7 @@ public interface IHangfireUtil
     void DeleteExistingRecurringJobs();
 
     /// <summary>
-    /// Executes the purge hangfire garbage operation.
+    /// Purges hangfire Garbage.
     /// </summary>
     [SkipMissedRuns]
     void PurgeHangfireGarbage();
