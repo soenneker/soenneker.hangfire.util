@@ -1,47 +1,63 @@
 [![](https://img.shields.io/nuget/v/soenneker.hangfire.util.svg?style=for-the-badge)](https://www.nuget.org/packages/soenneker.hangfire.util/)
 [![](https://img.shields.io/github/actions/workflow/status/soenneker/soenneker.hangfire.util/publish-package.yml?style=for-the-badge)](https://github.com/soenneker/soenneker.hangfire.util/actions/workflows/publish-package.yml)
+[![](https://img.shields.io/github/actions/workflow/status/soenneker/soenneker.hangfire.util/build-and-test.yml?style=for-the-badge&label=build)](https://github.com/soenneker/soenneker.hangfire.util/actions/workflows/build-and-test.yml)
 [![](https://img.shields.io/nuget/dt/soenneker.hangfire.util.svg?style=for-the-badge)](https://www.nuget.org/packages/soenneker.hangfire.util/)
 [![](https://img.shields.io/github/actions/workflow/status/soenneker/soenneker.hangfire.util/codeql.yml?label=CodeQL&style=for-the-badge)](https://github.com/soenneker/soenneker.hangfire.util/actions/workflows/codeql.yml)
 
 # Soenneker.Hangfire.Util
 
-A general-purpose, reusable utility class for managing Hangfire background jobs.
+Provides policy-driven cleanup operations for the current Hangfire job storage: selective failed and succeeded job deletion, full failed-job deletion, recurring-job removal, and purging of expired/deleted entries.
 
-## Install
+## Installation
 
 ```bash
 dotnet add package Soenneker.Hangfire.Util
 ```
 
-## Quick start
+## Configure cleanup policies
 
 ```csharp
+using Soenneker.Hangfire.Util.Options;
 using Soenneker.Hangfire.Util.Registrars;
-using Microsoft.Extensions.DependencyInjection;
 
-var services = new ServiceCollection();
-var result = services.AddHangfireUtilAsSingleton();
+services.Configure<HangfireUtilOptions>(options =>
+{
+    options.BatchSize = 250;
+    options.NotifyOnUnhandledFailedJobs = true;
+
+    options.ShouldDeleteFailedJob = job =>
+        job.FailedAt < DateTime.UtcNow.AddDays(-7);
+
+    options.ShouldDeleteSucceededJob = job =>
+        job.SucceededAt < DateTime.UtcNow.AddDays(-1);
+});
+
+services.AddHangfireUtilAsScoped();
 ```
 
-Adds `IHangfireUtil` as a singleton service.
+The utility operates through `JobStorage.Current`, so configure Hangfire storage before invoking it. A singleton registration is also available. The class does not own or dispose Hangfire's storage connection.
 
-## What you get
+## Run selective cleanup
 
-- `IHangfireUtil` — A general-purpose, reusable utility class for managing Hangfire background jobs.
-- `HangfireUtilRegistrar` — A general-purpose, reusable utility class for managing Hangfire background jobs.
-- `HangfireUtilOptions` — Represents the hangfire util options.
+```csharp
+using Soenneker.Hangfire.Util.Abstract;
 
-## API at a glance
+hangfireUtil.DeleteFailedJobs();
+hangfireUtil.DeleteSucceededJobs();
+```
 
-| API | What it does | Result / important behavior |
-| --- | --- | --- |
-| `IHangfireUtil.DeleteFailedJobs()` | Deletes failed Hangfire jobs based on filtering options. Logs unhandled jobs if enabled. | Returns no value; the requested change is complete when the method returns. |
-| `IHangfireUtil.DeleteFailedJobsSilently()` | Deletes all failed Hangfire jobs without logging unhandled ones. | Returns no value; the requested change is complete when the method returns. |
-| `IHangfireUtil.DeleteSucceededJobs()` | Deletes succeeded Hangfire jobs based on filtering options. | Returns no value; the requested change is complete when the method returns. |
-| `IHangfireUtil.DeleteExistingRecurringJobs()` | Removes all currently scheduled recurring Hangfire jobs. | Returns no value; the requested change is complete when the method returns. |
-| `HangfireUtilRegistrar.AddHangfireUtilAsSingleton(services)` | Adds `IHangfireUtil` as a singleton service. | The same service collection, so additional registrations can be chained. |
-| `HangfireUtilRegistrar.AddHangfireUtilAsScoped(services)` | Adds `IHangfireUtil` as a scoped service. | The same service collection, so additional registrations can be chained. |
-| `HangfireUtilOptions.BatchSize` | Gets or sets batch size. | Gets or sets batch size. |
-| `HangfireUtilOptions.ShouldDeleteFailedJob` | Determines whether a failed job should be deleted. | Determines whether a failed job should be deleted. |
-| `HangfireUtilOptions.ShouldDeleteSucceededJob` | Determines whether a succeeded job should be deleted. | Determines whether a succeeded job should be deleted. |
-| `HangfireUtilOptions.NotifyOnUnhandledFailedJobs` | Gets or sets a value indicating whether notify on unhandled failed jobs. | Gets or sets a value indicating whether notify on unhandled failed jobs. |
+These methods delete only jobs accepted by the corresponding predicate. With no predicate, normal jobs are retained, but entries whose job payload has already disappeared are still removed. When notifications are enabled, retained failed jobs are logged as warnings.
+
+## Destructive operations
+
+```csharp
+hangfireUtil.DeleteFailedJobsSilently();       // every failed job
+hangfireUtil.DeleteExistingRecurringJobs();   // every recurring definition
+hangfireUtil.PurgeHangfireGarbage();           // explicitly expired failures and deleted entries
+```
+
+`DeleteFailedJobsSilently()` is “silent” only with respect to retained-job warnings; it still logs the cleanup summary. `PurgeHangfireGarbage()` deletes failures whose Hangfire reason is exactly `Job expired`, plus everything already in the deleted set. It does not delete application failures merely because their exception mentions expiration.
+
+Cleanup pages through storage in `BatchSize` chunks and commits each page separately. It is not atomic across the whole data set. Back up production storage and stop competing cleanup processes before broad deletion. `DeleteExistingRecurringJobs()` removes definitions, not merely queued occurrences, so they will not run again until registered again.
+
+The cleanup methods carry `SkipMissedRunsAttribute`, making them suitable for recurring maintenance schedules without replaying stale cleanup occurrences after a scheduler outage.

@@ -10,7 +10,6 @@ using Hangfire.States;
 
 namespace Soenneker.Hangfire.Util;
 
-/// <inheritdoc cref="IHangfireUtil"/>
 public sealed class HangfireUtil : IHangfireUtil
 {
     private readonly ILogger<HangfireUtil> _logger;
@@ -30,7 +29,7 @@ public sealed class HangfireUtil : IHangfireUtil
         where TDto : class
     {
         IStorageConnection? conn = JobStorage.Current.GetConnection();
-        int batch = _options.BatchSize;
+        int batch = Math.Max(1, _options.BatchSize);
         var deleted = 0;
         var offset = 0;        
 
@@ -116,7 +115,8 @@ public sealed class HangfireUtil : IHangfireUtil
         try
         {
             IMonitoringApi? monitor = JobStorage.Current.GetMonitoringApi();
-            int deleted = PageDelete("succeeded", monitor.SucceededJobs, dto => _options.ShouldDeleteSucceededJob?.Invoke(dto) ?? false);
+            int deleted = PageDelete("succeeded", monitor.SucceededJobs,
+                dto => dto is null || (_options.ShouldDeleteSucceededJob?.Invoke(dto) ?? false));
 
             _logger.LogInformation("Deleted {Count} successful jobs.", deleted);
         }
@@ -159,9 +159,6 @@ public sealed class HangfireUtil : IHangfireUtil
         // null hash? -> already expired
         if (dto == null) return true;
 
-        // Hangfire puts "Job expired" into Reason; sometimes ExceptionMessage too.
-        return (dto.Reason?.Contains("Job expired", StringComparison.OrdinalIgnoreCase) ?? false) ||
-               (dto.ExceptionMessage?.Contains("expired", StringComparison.OrdinalIgnoreCase) ?? false) ||
-               (dto.ExceptionType?.Contains("Expired", StringComparison.OrdinalIgnoreCase) ?? false);
+        return string.Equals(dto.Reason, "Job expired", StringComparison.OrdinalIgnoreCase);
     }
 }

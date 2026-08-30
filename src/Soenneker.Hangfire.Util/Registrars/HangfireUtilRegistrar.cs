@@ -5,12 +5,12 @@ using Soenneker.Hangfire.Util.Abstract;
 namespace Soenneker.Hangfire.Util.Registrars;
 
 /// <summary>
-/// A general-purpose, reusable utility class for managing Hangfire background jobs
+/// Registers Hangfire storage cleanup operations.
 /// </summary>
 public static class HangfireUtilRegistrar
 {
     /// <summary>
-    /// Adds <see cref="IHangfireUtil"/> as a singleton service. <para/>
+    /// Adds <see cref="IHangfireUtil"/> as a singleton service.
     /// </summary>
     /// <param name="services">Service collection that receives the registration.</param>
     /// <returns>The same service collection, so additional registrations can be chained.</returns>
@@ -22,7 +22,7 @@ public static class HangfireUtilRegistrar
     }
 
     /// <summary>
-    /// Adds <see cref="IHangfireUtil"/> as a scoped service. <para/>
+    /// Adds <see cref="IHangfireUtil"/> as a scoped service.
     /// </summary>
     /// <param name="services">Service collection that receives the registration.</param>
     /// <returns>The same service collection, so additional registrations can be chained.</returns>

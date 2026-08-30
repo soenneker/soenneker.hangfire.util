@@ -3,36 +3,36 @@
 namespace Soenneker.Hangfire.Util.Abstract;
 
 /// <summary>
-/// A general-purpose, reusable utility class for managing Hangfire background jobs
+/// Performs destructive, policy-driven cleanup of Hangfire job storage.
 /// </summary>
 public interface IHangfireUtil
 {
     /// <summary>
-    /// Deletes failed Hangfire jobs based on filtering options. Logs unhandled jobs if enabled.
+    /// Deletes failed jobs selected by the configured predicate and optionally logs jobs the predicate retains.
     /// </summary>
     [SkipMissedRuns]
     void DeleteFailedJobs();
 
     /// <summary>
-    /// Deletes all failed Hangfire jobs without logging unhandled ones.
+    /// Deletes every failed job without evaluating the configured failed-job predicate.
     /// </summary>
     [SkipMissedRuns]
     void DeleteFailedJobsSilently();
 
     /// <summary>
-    /// Deletes succeeded Hangfire jobs based on filtering options.
+    /// Deletes succeeded jobs selected by the configured predicate.
     /// </summary>
     [SkipMissedRuns]
     void DeleteSucceededJobs();
 
     /// <summary>
-    /// Removes all currently scheduled recurring Hangfire jobs.
+    /// Removes every recurring job definition from the current Hangfire storage.
     /// </summary>
     [SkipMissedRuns]
     void DeleteExistingRecurringJobs();
 
     /// <summary>
-    /// Purges hangfire Garbage.
+    /// Purges failed entries explicitly marked with Hangfire's <c>Job expired</c> reason and all entries in the deleted set.
     /// </summary>
     [SkipMissedRuns]
     void PurgeHangfireGarbage();
