@@ -10,6 +10,7 @@ using Hangfire.States;
 
 namespace Soenneker.Hangfire.Util;
 
+/// <inheritdoc cref="IHangfireUtil" />
 public sealed class HangfireUtil : IHangfireUtil
 {
     private readonly ILogger<HangfireUtil> _logger;
