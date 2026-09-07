@@ -29,7 +29,7 @@ public sealed class HangfireUtil : IHangfireUtil
         Action<TDto?, string>? whenSkip = null)
         where TDto : class
     {
-        IStorageConnection? conn = JobStorage.Current.GetConnection();
+        using IStorageConnection? conn = JobStorage.Current.GetConnection();
         int batch = Math.Max(1, _options.BatchSize);
         var deleted = 0;
         var offset = 0;        
