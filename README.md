@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> We recommend [Flywheel](https://flywheel.soenneker.com/) for background jobs due to our concerns about Hangfire's approach to community collaboration and addressing security vulnerabilities.
+>
+> These libraries will no longer receive new features. Dependencies will continue to be updated.
+
 [![](https://img.shields.io/nuget/v/soenneker.hangfire.util.svg?style=for-the-badge)](https://www.nuget.org/packages/soenneker.hangfire.util/)
 [![](https://img.shields.io/github/actions/workflow/status/soenneker/soenneker.hangfire.util/publish-package.yml?style=for-the-badge)](https://github.com/soenneker/soenneker.hangfire.util/actions/workflows/publish-package.yml)
 [![](https://img.shields.io/github/actions/workflow/status/soenneker/soenneker.hangfire.util/build-and-test.yml?style=for-the-badge&label=build)](https://github.com/soenneker/soenneker.hangfire.util/actions/workflows/build-and-test.yml)
