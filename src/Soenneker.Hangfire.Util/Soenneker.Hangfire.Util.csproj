@@ -46,7 +46,7 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
-        <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.13" />
+        <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.14" />
         <PackageReference Include="Soenneker.Hangfire.SkipMissedRuns" Version="4.0.713" />
     </ItemGroup>
 </Project>
