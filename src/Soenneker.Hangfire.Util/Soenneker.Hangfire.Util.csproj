@@ -46,6 +46,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Soenneker.Hangfire.SkipMissedRuns" Version="4.0.713" />
+        <PackageReference Include="Soenneker.Hangfire.SkipMissedRuns" Version="11.0.715" />
     </ItemGroup>
 </Project>
